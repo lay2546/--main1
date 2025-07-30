@@ -1,24 +1,24 @@
-// 👉 Import Firebase config that connects to Firestore and Authentication
 import { db, auth } from './firebase.js';
-
-// 👉 Import Firestore methods (add data, read data, create queries, etc.)
 import {
   collection, addDoc, serverTimestamp, getDoc, doc, query, where, getDocs
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
-
-// 👉 Used to check user login status
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 
-// 👉 Wait for DOM to load before executing
+
 document.addEventListener("DOMContentLoaded", () => {
 
-  // 🔹 Sidebar management
+  async function getTranslation(key) {
+    const lang = localStorage.getItem("language") || "en";
+    const response = await fetch(`lang/${lang}.json`);
+    const translations = await response.json();
+    return translations[key] || key;
+  }
+
   const menuBtn = document.getElementById("menu-btn");
   const closeBtn = document.getElementById("close-btn");
   const sidebar = document.getElementById("sidebar");
   const overlay = document.getElementById("overlay");
 
-  // 👉 Show/hide Sidebar
   menuBtn?.addEventListener("click", () => toggleSidebar(true));
   closeBtn?.addEventListener("click", () => toggleSidebar(false));
   overlay?.addEventListener("click", () => toggleSidebar(false));
@@ -28,7 +28,6 @@ document.addEventListener("DOMContentLoaded", () => {
     overlay?.classList.toggle("show", show);
   }
 
-  // 🔹 Dropdown menu
   document.querySelectorAll(".dropdown-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const dropdownContent = btn.nextElementSibling;
@@ -36,7 +35,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // 🔹 Login/Logout handling
   const loginBtn = document.getElementById("login-btn");
   const logoutBtn = document.getElementById("logout-btn");
   const loginModal = document.getElementById("login-modal");
@@ -44,24 +42,16 @@ document.addEventListener("DOMContentLoaded", () => {
   loginBtn?.addEventListener("click", () => loginModal?.classList.remove("hidden"));
   document.getElementById("close-login-modal")?.addEventListener("click", () => loginModal?.classList.add("hidden"));
 
-  // 👉 Toggle login/logout button based on user status
   onAuthStateChanged(auth, (user) => {
-  if (user) {
-    loginBtn?.classList.add("hidden");
-    logoutBtn?.classList.remove("hidden");
-  } else {
-    loginBtn?.classList.remove("hidden");
-    logoutBtn?.classList.add("hidden");
-  }
-});
-
+    loginBtn?.classList.toggle("hidden", !!user);
+    logoutBtn?.classList.toggle("hidden", !user);
+  });
 
   logoutBtn?.addEventListener("click", async () => {
     await auth.signOut();
     window.location.reload();
   });
 
-  // 🔹 Cart-related variables
   const cartCount = document.getElementById("cart-count");
   const cartItems = document.getElementById("cart-items");
   const clearCart = document.getElementById("clear-cart");
@@ -71,10 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const slipInput = document.getElementById("payment-slip");
   const slipPreview = document.getElementById("slip-preview");
 
-  // 👉 Retrieve cart data from localStorage
   let cart = JSON.parse(localStorage.getItem("cart")) || [];
-
-  // 👉 Render cart items immediately after page load
   renderCart();
 
   function updateCartCount() {
@@ -88,10 +75,11 @@ document.addEventListener("DOMContentLoaded", () => {
     totalItemsElement.textContent = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
   }
 
-  function renderCart() {
+  async function renderCart() {
     cartItems.innerHTML = "";
     if (cart.length === 0) {
-      cartItems.innerHTML = "<li class='text-center text-gray-500'>🛒 Your cart is empty</li>";
+      const msg = await getTranslation("emptycartalert");
+      cartItems.innerHTML = `<li class='text-center text-gray-500'>${msg}</li>`;
     } else {
       cart.forEach((item, index) => {
         const li = document.createElement("li");
@@ -112,7 +100,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updateCartCount();
   }
 
-  // 🔹 Increase/Decrease/Remove item from cart
   cartItems.addEventListener("click", (event) => {
     let index = event.target.dataset.index;
     if (event.target.classList.contains("increase-qty")) {
@@ -130,16 +117,14 @@ document.addEventListener("DOMContentLoaded", () => {
     renderCart();
   });
 
-  // 🔹 Add item from "add-to-cart" button
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
     if (event.target.classList.contains("add-to-cart")) {
       const user = auth.currentUser;
       if (!user) {
-        alert("❌ Please log in before adding items");
+        alert(await getTranslation("loginbeforeorder"));
         loginModal?.classList.remove("hidden");
         return;
       }
-
       let name = event.target.dataset.name;
       let price = event.target.dataset.price;
       let existingItem = cart.find(item => item.name === name);
@@ -155,24 +140,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 🔹 Clear the entire cart
   clearCart?.addEventListener("click", () => {
     localStorage.removeItem("cart");
     cart = [];
     renderCart();
   });
 
-  // 🔹 Submit order and save to Firestore
   async function submitOrder() {
     const user = auth.currentUser;
     if (!user) {
-      alert("Please log in before placing an order");
+      alert(await getTranslation("loginbeforeorder"));
       loginModal?.classList.remove("hidden");
       return;
     }
 
     if (cart.length === 0) {
-      alert("Your cart is empty");
+      alert(await getTranslation("emptycartalert"));
       return;
     }
 
@@ -184,7 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const address = userData.address || "";
 
       if (!address.trim()) {
-        alert("❗ Please fill in your delivery address");
+        alert(await getTranslation("pleasefilladdress"));
         window.location.href = "Delivery.html";
         return;
       }
@@ -196,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (paymentMethod === "transfer") {
         slipUrl = currentSlipUrl;
         if (!slipUrl) {
-          alert("Please upload a transfer slip");
+          alert(await getTranslation("uploadslip"));
           return;
         }
       }
@@ -213,22 +196,20 @@ document.addEventListener("DOMContentLoaded", () => {
         createdAt: serverTimestamp()
       });
 
-      alert("✅ Order submitted successfully!");
+      alert(await getTranslation("ordersuccess"));
       localStorage.removeItem("cart");
       window.location.href = "orderhistory.html";
     } catch (error) {
       console.error("❌ Error submitting order:", error);
-      alert("Failed to place order");
+      alert(await getTranslation("orderfail"));
     }
   }
 
-  // 🔹 Checkout confirmation modal
   checkoutBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     confirmModal?.classList.remove('hidden');
   });
 
-  // 🔹 Show/hide slip upload and QR PromptPay
   const paymentMethod = document.getElementById('payment-method');
   const slipUpload = document.getElementById('slip-upload-container');
   const qrPreview = document.getElementById("qr-preview");
@@ -237,19 +218,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (paymentMethod.value === 'transfer') {
       slipUpload.classList.remove('hidden');
       qrPreview.classList.remove('hidden');
-      const qrCanvas = document.getElementById("qr-canvas");
-      const amount = totalPriceElement?.textContent || "0.00";
-      QRCode.toCanvas(qrCanvas, `promptpay.io/0642715511${amount}`, {
-        width: 200,
-        color: { dark: "#000", light: "#fff" }
-      });
     } else {
       slipUpload.classList.add('hidden');
       qrPreview.classList.add('hidden');
     }
   });
 
-  // 🔹 Upload slip image to Cloudinary
   const uploadSlipToCloudinary = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -263,8 +237,6 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   let currentSlipUrl = "";
-
-  // 🔹 Upload slip when file is selected
   slipInput?.addEventListener("change", async function (e) {
     const file = e.target.files[0];
     if (file) {
@@ -274,7 +246,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 🔹 Confirm order modal
   const confirmModal = document.getElementById('confirm-modal');
   const confirmSubmit = document.getElementById('confirm-submit');
   const cancelSubmit = document.getElementById('cancel-submit');
@@ -285,7 +256,6 @@ document.addEventListener("DOMContentLoaded", () => {
     await submitOrder();
   });
 
-  // 🔹 Discount coupon
   const couponInput = document.getElementById("coupon-input");
   const applyCouponBtn = document.getElementById("apply-coupon");
   const couponResult = document.getElementById("coupon-result");
@@ -298,19 +268,19 @@ document.addEventListener("DOMContentLoaded", () => {
   applyCouponBtn?.addEventListener("click", async () => {
     const code = couponInput.value.trim();
     if (!code) {
-      alert("Please enter a coupon code");
+      alert(await getTranslation("enter_coupon"));
       return;
     }
     try {
       const q = query(collection(db, "coupons"), where("code", "==", code));
       const querySnap = await getDocs(q);
       if (querySnap.empty) {
-        alert("❌ Invalid coupon");
+        alert(await getTranslation("invalid_coupon"));
         return;
       }
       const coupon = querySnap.docs[0].data();
       if (coupon.expired) {
-        alert("❌ Coupon has expired");
+        alert(await getTranslation("coupon_expired"));
         return;
       }
       currentDiscount = coupon.discount || 0;
@@ -324,30 +294,76 @@ document.addEventListener("DOMContentLoaded", () => {
       discountValueElement.textContent = currentDiscount;
     } catch (err) {
       console.error("Error applying coupon:", err);
-      alert("Error applying coupon");
+      alert(await getTranslation("error_coupon"));
     }
-  });
+    document.addEventListener("click", async (event) => {
+  if (event.target.classList.contains("add-to-cart")) {
+    const user = auth.currentUser;
+    if (!user) {
+      alert(await getTranslation("loginbeforeorder"));
+      loginModal?.classList.remove("hidden");
+      return;
+    }
 
-  // 🔹 Navigate to admin coupon page
-  document.getElementById("go-to-coupon-page")?.addEventListener("click", () => {
-    window.location.href = "admin_coupon.html";
-  });
+    const productId = event.target.dataset.id;
+    const productRef = doc(db, "products", productId);
+    const productSnap = await getDoc(productRef);
+    if (!productSnap.exists()) return;
 
-  // 🔹 Toast alert for item added
-  function showToast(message, type = "info") {
-    const toast = document.createElement("div");
-    toast.textContent = message;
-    toast.className = `
-      toast-message
-      ${type === "success" ? "bg-green-500" : type === "error" ? "bg-red-500" : "bg-gray-700"}
-      animate-fade-in-out
-      show
-    `.replace(/\s+/g, ' ');
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      toast.classList.remove("show");
-      setTimeout(() => toast.remove(), 300);
-    }, 2000);
+    const productData = productSnap.data();
+    const existingItem = cart.find(item => item.id === productId);
+    const currentQty = existingItem ? existingItem.quantity : 0;
+
+    if (currentQty + 1 > productData.quantity) {
+      alert("สินค้าในสต็อกไม่พอ");
+      return;
+    }
+
+    if (existingItem) {
+      existingItem.quantity++;
+    } else {
+      cart.push({
+        id: productId,
+        name: productData.name,
+        price: productData.price,
+        quantity: 1,
+        stock: productData.quantity
+      });
+    }
+
+    localStorage.setItem("cart", JSON.stringify(cart));
+    renderCart();
   }
+});
+cartItems.addEventListener("click", async (event) => {
+  let index = event.target.dataset.index;
+
+  if (event.target.classList.contains("increase-qty")) {
+    const productId = cart[index].id;
+    const productRef = doc(db, "products", productId);
+    const productSnap = await getDoc(productRef);
+    if (!productSnap.exists()) return;
+
+    const productData = productSnap.data();
+    if (cart[index].quantity + 1 > productData.quantity) {
+      alert("สินค้าในสต็อกไม่พอ");
+      return;
+    }
+    cart[index].quantity++;
+  } else if (event.target.classList.contains("decrease-qty")) {
+    if (cart[index].quantity > 1) {
+      cart[index].quantity--;
+    } else {
+      cart.splice(index, 1);
+    }
+  } else if (event.target.classList.contains("remove-item")) {
+    cart.splice(index, 1);
+  }
+
+  localStorage.setItem("cart", JSON.stringify(cart));
+  renderCart();
+});
+
+  });
 
 });
